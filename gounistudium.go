@@ -17,7 +17,7 @@ const (
 	GraduationRoom roomType = 245
 )
 
-const baseUrl = "https://unistudium.unipg.it/cercacorso.php?%d"
+const baseUrl = "https://unistudium.unipg.it/cercacorso.php?p=%d"
 
 type Room struct {
 	CourseName  string
