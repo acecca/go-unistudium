@@ -2,11 +2,13 @@ package gounistudium
 
 import (
 	"fmt"
-	"github.com/antchfx/htmlquery"
-	"golang.org/x/net/html"
 	"io/ioutil"
 	"net/http"
 	"strings"
+
+	"github.com/antchfx/htmlquery"
+	"github.com/antchfx/xpath"
+	"golang.org/x/net/html"
 )
 
 type roomType int
@@ -20,10 +22,13 @@ const (
 const baseUrl = "https://unistudium.unipg.it/cercacorso.php?p=%d"
 
 type Room struct {
-	CourseName  string
-	Professor   string
-	Degree      string
-	MeetingLink string
+	CourseName     string
+	Professor      string
+	Degree         string
+	MeetingLink    string
+	Time           string
+	GraduationCode string
+	Department     string
 }
 
 // FindRooms returns an array of type Room containing information about the rooms
@@ -53,7 +58,12 @@ func FindRooms(roomType roomType, query string) ([]Room, error) {
 
 	// the first tr element in the table contains the headers, so we can ignore it
 	for i := 1; i < len(trNodes); i++ {
-		room, _ := HtmlToRoom(trNodes[i])
+		room, err := HtmlToRoom(trNodes[i], roomType)
+		if err != nil {
+			fmt.Println("Errore HtmlToRoom")
+			return nil, err
+		}
+
 		rooms = append(rooms, room)
 	}
 
@@ -75,16 +85,46 @@ func Request(requestUrl string, payload *strings.Reader) (string, error) {
 	}
 
 	defer res.Body.Close()
-	body, _ := ioutil.ReadAll(res.Body)
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		fmt.Println("errore ioutil.Readall")
+		return "", err
+	}
 
 	return string(body), nil
 }
 
 // HtmlToRoom parses the HTML code into a struct of type Room
-func HtmlToRoom(node *html.Node) (Room, error) {
+func HtmlToRoom(node *html.Node, roomType roomType) (Room, error) {
 	tdNodes, err := htmlquery.QueryAll(node, "//td")
 	if err != nil {
 		return Room{}, err
+	}
+
+	if roomType == ExamRoom {
+		return Room{
+			CourseName:  htmlquery.InnerText(tdNodes[0]),
+			Professor:   htmlquery.InnerText(tdNodes[1]),
+			Degree:      htmlquery.InnerText(tdNodes[2]),
+			Time:        htmlquery.InnerText(tdNodes[3]),
+			MeetingLink: htmlquery.SelectAttr(tdNodes[4].FirstChild, "href"),
+		}, nil
+	}
+
+	if roomType == GraduationRoom {
+		a, err := xpath.Compile("/form/input[7]")
+		if err != nil {
+			fmt.Println("Errore xpath.Compile")
+			return Room{}, err
+		}
+
+		s := htmlquery.SelectAttr(htmlquery.QuerySelector(tdNodes[3], a), "value")
+		return Room{
+			Department:     htmlquery.InnerText(tdNodes[0]),
+			Degree:         htmlquery.InnerText(tdNodes[1]),
+			Time:           htmlquery.InnerText(tdNodes[2]),
+			GraduationCode: strings.Split(s, " ")[2],
+		}, nil
 	}
 
 	return Room{
